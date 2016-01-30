@@ -5,35 +5,54 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <errno.h>
+#include <signal.h>
+#include <time.h>
 #include "Practical.h"
 
 #define MAXSTRINGLEN 1000
-#define MAXVAL 1000000000 
+#define MAXVAL 1000000000
+#define VERBOSE
 
 struct clientNode {
-    struct sockaddr_storage *client_sockaddr;
+    struct sockaddr_in *clientSockaddr;
     struct clientNode *next;
 };
 
 int processGuess(int guess, int actual);
-
 int getNewValue();
+void sigHandler(int signal);
+
+int messagesSent = 0;
+int clientsHandled = 0;
+struct clientNode *clientListHead = NULL;
 
 int main(int argc, char *argv[]){
-
+    // parse user arguments
     if(argc < 2 || argc > 3){
         DieWithUserMessage("Parameter(s)", 
             "<Server Port/ Service> [initial value]");
     }
-
     char *service = argv[1];
+
+
+    // setup signal handler for SIGINT
+    struct sigaction handler;
+    sigfillset(&handler.sa_mask);
+    handler.sa_flags = 0;
+    handler.sa_handler = sigHandler;
+    if (sigaction(SIGINT, &handler, 0) < 0){
+        fprintf(stderr, "ERROR: sigaction() failed");
+        exit(1);
+    }
+
+    // generate addrinfo linked list
     struct addrinfo addrCriteria;
     memset(&addrCriteria, 0, sizeof(addrCriteria));
     addrCriteria.ai_family = AF_UNSPEC;
     addrCriteria.ai_flags = AI_PASSIVE;
     addrCriteria.ai_socktype = SOCK_DGRAM;
     addrCriteria.ai_protocol = IPPROTO_UDP;
-
     struct addrinfo *servAddr;
     int rtnVal = getaddrinfo(NULL, service, &addrCriteria, &servAddr);
     if (rtnVal != 0){
@@ -41,27 +60,20 @@ int main(int argc, char *argv[]){
         DieWithUserMessage("getaddrinfo() failed", gai_strerror(rtnVal));
     }
 
+    // build socket with servAddr linked list
     int sock = socket(servAddr->ai_family, servAddr->ai_socktype, servAddr->ai_protocol);
     if (sock < 0){
-        // handle socket creation error
         DieWithSystemMessage("socket() failed");
     }
-
     if(bind(sock, servAddr->ai_addr, servAddr->ai_addrlen) < 0){
         // handle binding failure
         DieWithSystemMessage("bind() failed");
     }
-
     freeaddrinfo(servAddr);
 
-    //create the node to the client list head
-    struct clientNode *clientListHead;
-
     // initialize a struct to hold client info
-    struct sockaddr_storage clntAddr;
+    struct sockaddr_in clntAddr;
     socklen_t clntAddrLen = sizeof(clntAddr);
-
-
 
     //generate starting value, either user- specified or random
     int theValue;
@@ -73,28 +85,51 @@ int main(int argc, char *argv[]){
         theValue = getNewValue();
     }
 
-
-    long messageCount = 0;
     while (true) {
         // recieve value (unknown client!)
         int recievedValue;
         ssize_t numBytesRecived = recvfrom(sock, &recievedValue, sizeof(recievedValue), 0, 
             (struct sockaddr*) &clntAddr, &clntAddrLen);
         //could be point of failure, if server processes a metric shit ton of messages
-        messageCount++;
 
-
-    /*  // check to see if client is in client list
+        // check to see if client is in client list
         //Yes: use that client
         //No: create new client object to store data about the new client
-        clientNode *nextClient = clientListHead;
+// manage client list
+        uint32_t clientAddress = clntAddr.sin_addr.s_addr;
+        in_port_t clientPort = clntAddr.sin_port;
+
+        struct clientNode *nextClient = clientListHead;
         bool clientIsInList = false;
         while (nextClient != NULL && !clientIsInList){
             // see pg 24 to understand this nonsense
-            uint32_t clientAddress = nextClient -> client_sockaddr -> in_addr.s_addr;
+            uint32_t nextClientAddress = nextClient -> clientSockaddr -> 
+                sin_addr.s_addr;
+            in_port_t nextClientPort = nextClient -> clientSockaddr -> sin_port;
+
+            if(nextClientAddress == clientAddress && nextClientPort == clientPort){
+                //client is in list
+                clientIsInList = true;
+            }
+
+            nextClient = nextClient -> next;
         }
 
-    */
+        if (!clientIsInList){
+        #ifdef VERBOSE
+            printf("New Client! Address and port: %u: %u\n", clientAddress, clientPort);
+        #endif
+            // add new client to list
+            struct clientNode *newClient = malloc(sizeof(struct clientNode));
+            newClient -> clientSockaddr = malloc(sizeof(struct sockaddr_in));
+            newClient -> clientSockaddr -> sin_addr.s_addr = clientAddress;
+            newClient -> clientSockaddr -> sin_port = clientPort;
+            newClient -> next = clientListHead;
+            clientListHead = newClient;
+            clientsHandled++;
+        }
+// end manage client list
+
 
         //check clients value and generate the return code
         if (numBytesRecived < 0){
@@ -114,6 +149,7 @@ int main(int argc, char *argv[]){
         if (numBytesSent != sizeof(int)){
             DieWithUserMessage("sendto()", "sent unexpected number of bytes");
         }
+        messagesSent++;
     }
 }
 
@@ -136,6 +172,20 @@ int getNewValue(){
     double randomRatio = ((double)rand()) / RAND_MAX;
     int newVal = (int)(randomRatio * MAXVAL);
     return newVal;
+}
+
+void sigHandler(int signalID){
+    if(signalID == SIGINT){
+        char *outputString = malloc(MAXSTRINGLEN * sizeof(char));
+        sprintf(outputString, "%d\t%dh\t", messagesSent, clientsHandled);
+
+        while(clientListHead -> next != NULL){
+            // TODO: implement
+            clientListHead = clientListHead -> next;
+        }
+    }
+
+    exit(0);
 }
 
 

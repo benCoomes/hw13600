@@ -11,6 +11,7 @@
 #include "Practical.h"
 
 #define TIMEOUTSEC 1
+//#define VERBOSE
 
 int getNextValue(int lastVal, int statusCode);
 char checkValue(int val, int sock, struct addrinfo *servAddr);
@@ -68,7 +69,9 @@ int main(int argc, char *argv[]){
     int socketStatus = -1;
     socketStatus = testSocket(sock, servAddr);
     if (socketStatus < 0) {
-        puts("sock() with port 1 failed, trying to build socket with port 2...\n");
+        #ifdef VERBOSE
+            puts("sock() with port 1 failed, trying to build socket with port 2...\n");
+        #endif
 
         freeaddrinfo(servAddr); // Is servAddr usable in getaddrinfo after this?
         int rtnval = getaddrinfo(server, servPort2, &addrCriteria, &servAddr);
@@ -88,6 +91,9 @@ int main(int argc, char *argv[]){
     // Main loop: loop until a value is guessed correctly
     runtime = getTime();
     while (1) {
+        #ifdef VERBOSE
+            prinf("At top of main loop\n");
+        #endif
         int returnCode = checkValue(nextValue, sock, servAddr);
         switch(returnCode){
             case 1:
@@ -194,7 +200,6 @@ char checkValue(int guess, int sock, struct addrinfo *servAddr){
     }*/
 
     //return response
-    printf("returnedCode: %d\n", returnedCode);
     return returnedCode;
 }
 
@@ -237,14 +242,18 @@ int testSocket(int sock, struct addrinfo *servAddr){
 }
 
 void sigHandler(int signalID){
-    printf("in interruptSignalHandler\n");
+    #ifdef VERBOSE
+        printf("in interruptSignalHandler\n");
+    #endif
     if(signalID == SIGINT){
         double totalTime = getTime() - runtime;
         printf("%d\t%.2f\t%d\n", guessCount, totalTime, nextValue);
         exit(0);
     }
     else if(signalID == SIGALRM){
-        printf("in alarm handler, alarm ignored.\n");
+        #ifdef VERBOSE
+            printf("in alarm handler, alarm ignored.\n");
+        #endif
         return;
     }
     else{
