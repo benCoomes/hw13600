@@ -88,8 +88,6 @@ int main(int argc, char *argv[]){
     // Main loop: loop until a value is guessed correctly
     runtime = getTime();
     while (1) {
-        // start work here, get rid of switch, implement same logic with something else
-        printf("at top of main loop, ");
         int returnCode = checkValue(nextValue, sock, servAddr);
         switch(returnCode){
             case 1:
@@ -174,6 +172,9 @@ char checkValue(int guess, int sock, struct addrinfo *servAddr){
     // DOES THIS AFFECT ALARMS???? NO - else if
     else if (bytesRecieved != sizeof(int)){
         DieWithUserMessage("recvfrom() error", "recieved unexpected number of bytes");
+    }
+    else {
+        guessCount++;
     }
     alarm(0);
     
