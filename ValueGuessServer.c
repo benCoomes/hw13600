@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <time.h>
+#include <arpa/inet.h>
 #include "Practical.h"
 
 #define MAXSTRINGLEN 1000
@@ -176,13 +177,16 @@ int getNewValue(){
 
 void sigHandler(int signalID){
     if(signalID == SIGINT){
-        char *outputString = malloc(MAXSTRINGLEN * sizeof(char));
-        sprintf(outputString, "%d\t%dh\t", messagesSent, clientsHandled);
-
-        while(clientListHead -> next != NULL){
-            // TODO: implement
-            clientListHead = clientListHead -> next;
+        fprintf(stdout, "\n%d\t%d\t", messagesSent, clientsHandled);
+        struct clientNode  *nextClient = clientListHead;
+        while(nextClient != NULL){
+            struct in_addr ipaddr = nextClient -> clientSockaddr -> sin_addr;
+            char ipString[100];
+            inet_ntop(AF_INET, &ipaddr, ipString, 100); 
+            fprintf(stdout, "%s, ", ipString);
+            nextClient = nextClient -> next;
         }
+        fprintf(stdout, "\n");
     }
 
     exit(0);
