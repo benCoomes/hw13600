@@ -7,35 +7,23 @@
 #include <netdb.h>
 #include <signal.h>
 #include <time.h>
-#include <setjmp.h>
+#include <errno.h>
 #include "Practical.h"
 
+#define TIMEOUTSEC 1
+
 int getNextValue(int lastVal, int statusCode);
-
 char checkValue(int val, int sock, struct addrinfo *servAddr);
-
 double getTime();
+int testSocket(int sock, struct addrinfo *servAddr);
+void sigHandler(int signal);
 
-void interruptSignalHandler(int signal);
-struct sigaction handler;
 
-int returnedCode = 4;
 int nextValue = 0;
 int guessCount = 0;
 double runtime = 0.0;
 
 int main(int argc, char *argv[]){
-
-    memset(&handler,0,sizeof(handler));
-    handler.sa_handler = interruptSignalHandler;
-    if(sigaction(SIGINT, &handler, 0) < 0){
-        fprintf(stderr, "ERROR: sigaction() failed");
-        exit(1);
-    }
-    if(sigaction(SIGALRM, &handler, 0) < 0){
-        fprintf(stderr, "ERROR: sigaction() failed");
-        exit(1);
-    }
 
     // parse command line arguments
     if (argc != 4){
@@ -45,6 +33,22 @@ int main(int argc, char *argv[]){
     char *server = argv[1];
     char *servPort1 = argv[2];
     char *servPort2 = argv[3];
+
+
+    // setup signal handler for SIGALRM and SIGINT
+    struct sigaction handler;
+    sigfillset(&handler.sa_mask);
+    handler.sa_flags = 0;
+    handler.sa_handler = sigHandler;
+    if(sigaction(SIGINT, &handler, 0) < 0){
+        fprintf(stderr, "ERROR: sigaction() failed");
+        exit(1);
+    }
+    if(sigaction(SIGALRM, &handler, 0) < 0){
+        fprintf(stderr, "ERROR: sigaction() failed");
+        exit(1);
+    }
+
 
     // generate addrinfo linked list using the first port option
     struct addrinfo addrCriteria;
@@ -58,18 +62,13 @@ int main(int argc, char *argv[]){
         DieWithUserMessage("getaddrinfo() failed", gai_strerror(rtnval));
     }
 
-    // try to build a socket with port 1 and then port 2
-
-    /*my notes: it seems that sockets can still be built even if the port is closed
-                of course, nothing happens when an incorrect port is used.
-                How can a closed port be detected? should I implement a handshake
-                routine and use a timeout to indicate that the client/server connection
-                is not working?
-    */
+    // try to build a socket with port 1 and then port 2, and test if it works
     int sock = socket(servAddr-> ai_family, servAddr-> ai_socktype, 
         servAddr-> ai_protocol);
-    if (sock < 0) {
-        puts("Port 1 failed, trying to build socket with port 2...\n");
+    int socketStatus = -1;
+    socketStatus = testSocket(sock, servAddr);
+    if (socketStatus < 0) {
+        puts("sock() with port 1 failed, trying to build socket with port 2...\n");
 
         freeaddrinfo(servAddr); // Is servAddr usable in getaddrinfo after this?
         int rtnval = getaddrinfo(server, servPort2, &addrCriteria, &servAddr);
@@ -79,58 +78,32 @@ int main(int argc, char *argv[]){
 
         sock = socket(servAddr-> ai_family, servAddr-> ai_socktype, 
             servAddr-> ai_protocol);
-        if(sock < 0){
+        socketStatus = testSocket(sock, servAddr);
+        if(socketStatus < 0){
             DieWithUserMessage("Socket()", "failed to create socket, tried both ports");
         }
     }
 
 
     // Main loop: loop until a value is guessed correctly
-    // 4 is arbitrary, only 0, 1, and 2 are meaningful returnedCode values
     runtime = getTime();
     while (1) {
         // start work here, get rid of switch, implement same logic with something else
         printf("at top of main loop, ");
-        /*
-        switch(jumpCode){
-            case SIGALRM:
-                // case for when alarm goes off!
-                printf("alarm went off!\n");
-                break;
-            case SIGINT: 
-                //case for when user interrupt is called!
-                goto clean_up;
-                break; // unneccesay, but makes me feel better
-            case 0:
-                //case for when normal execution should occur
-                printf("in case 0 of main loop\n");
-                alarm(1);
-                nextValue = getNextValue(nextValue, returnedCode);
-                returnedCode = checkValue(nextValue, sock, servAddr);
-                guessCount++;
-                alarm(0);
-                break;
-            default:
-                //long jump called, fatal error!
-                exit(1);
-        }
-        */
-
-        
-        returnedCode = checkValue(nextValue, sock, servAddr);
-        alarm(0);
-        switch(returnedCode){
-            case SIGALRM:
-                //when alarm is popped, continue with loop
-                returnedCode = 4;
-                break;
+        int returnCode = checkValue(nextValue, sock, servAddr);
+        switch(returnCode){
             case 1:
             case 2:
                 //for guesses that were incorrecct
-                nextValue = getNextValue(nextValue, returnedCode);
+                nextValue = getNextValue(nextValue, returnCode);
+                break;
+
+            case EINTR:
+                // for cases where recvfrom timeout'd, continue with loop
                 break;
 
             case 0:
+                // for guesses that were correct
                 goto clean_up;
                 break;
         }
@@ -171,6 +144,8 @@ int getNextValue(int lastVal, int statusCode){
 
 char checkValue(int guess, int sock, struct addrinfo *servAddr){
 
+    int returnedCode;
+
     // send package with val to server 
     ssize_t bytesSent = sendto(sock, &guess, sizeof(guess), 0,
         servAddr -> ai_addr, servAddr -> ai_addrlen);
@@ -184,17 +159,23 @@ char checkValue(int guess, int sock, struct addrinfo *servAddr){
     struct sockaddr_storage fromAddr;
     socklen_t fromAddrLen = sizeof(fromAddr);
 
-    alarm(1);
-    if(returnedCode != SIGALRM){
-        ssize_t bytesRecieved = recvfrom(sock, &returnedCode, sizeof(returnedCode), 0, 
-            (struct sockaddr*) &fromAddr, &fromAddrLen);
-        if (bytesRecieved < 0){
+    alarm(TIMEOUTSEC);
+    ssize_t bytesRecieved = recvfrom(sock, &returnedCode, sizeof(returnedCode), 0, 
+        (struct sockaddr*) &fromAddr, &fromAddrLen);
+    if (bytesRecieved < 0){
+        if (errno = EINTR){
+            // alarm went off
+            returnedCode = EINTR;
+        }
+        else{
             DieWithSystemMessage("recvfrom() failed");
         }
-        else if (bytesRecieved != sizeof(int)){
-            DieWithUserMessage("recvfrom() error", "recieved unexpected number of bytes");
-        }
     }
+    // DOES THIS AFFECT ALARMS???? NO - else if
+    else if (bytesRecieved != sizeof(int)){
+        DieWithUserMessage("recvfrom() error", "recieved unexpected number of bytes");
+    }
+    alarm(0);
     
     // verify package recived is from server that package was sent to
 /*
@@ -223,16 +204,46 @@ double getTime(){
              + (double) curTime.tv_usec) / 1000000.0);
 }
 
-void interruptSignalHandler(int signalID){
+// return values less than 0 indicate that sock does not work
+int testSocket(int sock, struct addrinfo *servAddr){
+    if(sock < 0){
+        return sock;
+    }
+    else {
+        //try sendto and recvfrom, reutrn -1 if they fail, 1 if success
+        int checkMessage = -100;
+        int returnValue;
+        struct sockaddr_storage fromAddr;
+        socklen_t fromAddrLen = sizeof(fromAddr);
+        ssize_t bytesRecieved;
+
+        ssize_t bytesSent = sendto(sock, &checkMessage, sizeof(checkMessage), 0,
+            servAddr -> ai_addr, servAddr -> ai_addrlen);
+        if (bytesSent < 0){
+            return -1;
+        }
+
+        alarm(TIMEOUTSEC);
+        bytesRecieved = recvfrom(sock, &returnValue, sizeof(returnValue), 0, 
+            (struct sockaddr*) &fromAddr, &fromAddrLen);
+        if (bytesRecieved < 0){
+            return -1;
+        }
+        alarm(0);
+    }
+
+    return 1;
+}
+
+void sigHandler(int signalID){
     printf("in interruptSignalHandler\n");
     if(signalID == SIGINT){
         double totalTime = getTime() - runtime;
         printf("%d\t%.2f\t%d\n", guessCount, totalTime, nextValue);
-        return;
+        exit(0);
     }
     else if(signalID == SIGALRM){
-        printf("in alarm handler, setting returnedCode to SIGALRM\n");
-        returnedCode = SIGALRM;
+        printf("in alarm handler, alarm ignored.\n");
         return;
     }
     else{
