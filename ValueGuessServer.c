@@ -13,7 +13,7 @@
 
 #define MAXSTRINGLEN 1000
 #define MAXVAL 1000000000
-#define VERBOSE
+//#define VERBOSE
 
 struct clientNode {
     struct sockaddr_in *clientSockaddr;
