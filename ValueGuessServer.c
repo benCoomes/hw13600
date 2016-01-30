@@ -37,52 +37,6 @@ int main(int argc, char *argv[]){
     in_port_t service = atoi(argv[2]);
 
 
-    // setup signal handler for SIGINT
-    struct sigaction handler;
-    sigfillset(&handler.sa_mask);
-    handler.sa_flags = 0;
-    handler.sa_handler = sigHandler;
-    if (sigaction(SIGINT, &handler, 0) < 0){
-        fprintf(stderr, "ERROR: sigaction() failed");
-        exit(1);
-    }
-
-    // generate addrinfo linked list
-/*
-    struct addrinfo addrCriteria;
-    memset(&addrCriteria, 0, sizeof(addrCriteria));
-    addrCriteria.ai_family = AF_UNSPEC;
-    addrCriteria.ai_flags = AI_PASSIVE;
-    addrCriteria.ai_socktype = SOCK_DGRAM;
-    addrCriteria.ai_protocol = IPPROTO_UDP;
-    struct addrinfo *servAddr;
-    int rtnVal = getaddrinfo(NULL, service, &addrCriteria, &servAddr);
-    if (rtnVal != 0){
-        // handle getaddrinfo failure
-        DieWithUserMessage("getaddrinfo() failed", gai_strerror(rtnVal));
-    }
-**/
-    struct sockaddr_in servAddrReal;
-    struct sockaddr_in *servAddr = &servAddrReal;
-    memset(servAddr, 0, sizeof(struct sockaddr_in));
-    servAddr->sin_family = AF_INET;
-    servAddr->sin_addr.s_addr = htonl(INADDR_ANY);
-    servAddr->sin_port = htons(service);
-
-    // build socket with servAddr linked list
-    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (sock < 0){
-        DieWithSystemMessage("socket() failed");
-    }
-    if(bind(sock, (struct sockaddr *) servAddr, sizeof(*servAddr)) < 0){
-        // handle binding failure
-        DieWithSystemMessage("bind() failed");
-    }
-
-    // initialize a struct to hold client info
-    struct sockaddr_in clntAddr;
-    socklen_t clntAddrLen = sizeof(clntAddr);
-
     //generate starting value, either user- specified or random
     int theValue;
     if(argc == 5){
@@ -93,24 +47,52 @@ int main(int argc, char *argv[]){
         theValue = getNewValue();
     }
 
+    // setup signal handler for SIGINT
+    struct sigaction handler;
+    sigfillset(&handler.sa_mask);
+    handler.sa_flags = 0;
+    handler.sa_handler = sigHandler;
+    if (sigaction(SIGINT, &handler, 0) < 0){
+        fprintf(stderr, "ERROR: sigaction() failed");
+        exit(1);
+    }
+
+    // fill out sockadd_in structure with information about this server
+    struct sockaddr_in servAddrReal;
+    struct sockaddr_in *servAddr = &servAddrReal;
+    memset(servAddr, 0, sizeof(struct sockaddr_in));
+    servAddr->sin_family = AF_INET;
+    servAddr->sin_addr.s_addr = htonl(INADDR_ANY);
+    servAddr->sin_port = htons(service);
+
+    // build IPV4 UDP socket and bind it to the specified port
+    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock < 0){
+        DieWithSystemMessage("socket() failed");
+    }
+    if(bind(sock, (struct sockaddr *) servAddr, sizeof(*servAddr)) < 0){
+        DieWithSystemMessage("bind() failed");
+    }
+
+
+    // initialize a struct to hold client info
+    struct sockaddr_in clntAddr;
+    socklen_t clntAddrLen = sizeof(clntAddr);
+
+
+    // begin main loop, which continues until ^C is entered
     while (true) {
-        // recieve value (unknown client!)
         int recievedValue;
         ssize_t numBytesRecived = recvfrom(sock, &recievedValue, sizeof(recievedValue), 0, 
             (struct sockaddr*) &clntAddr, &clntAddrLen);
-        //could be point of failure, if server processes a metric shit ton of messages
 
-        // check to see if client is in client list
-        //Yes: use that client
-        //No: create new client object to store data about the new client
-// manage client list
+
+        // check to see if client is list of known clients
         uint32_t clientAddress = clntAddr.sin_addr.s_addr;
         in_port_t clientPort = clntAddr.sin_port;
-
         struct clientNode *nextClient = clientListHead;
         bool clientIsInList = false;
         while (nextClient != NULL && !clientIsInList){
-            // see pg 24 to understand this nonsense
             uint32_t nextClientAddress = nextClient -> clientSockaddr -> 
                 sin_addr.s_addr;
             in_port_t nextClientPort = nextClient -> clientSockaddr -> sin_port;
@@ -119,10 +101,8 @@ int main(int argc, char *argv[]){
                 //client is in list
                 clientIsInList = true;
             }
-
             nextClient = nextClient -> next;
         }
-
         if (!clientIsInList){
         #ifdef VERBOSE
             printf("New Client! Address and port: %u: %u\n", clientAddress, clientPort);
@@ -136,21 +116,18 @@ int main(int argc, char *argv[]){
             clientListHead = newClient;
             clientsHandled++;
         }
-// end manage client list
 
 
         //check clients value and generate the return code
         if (numBytesRecived < 0){
-            // perhaps just return incorrect guess code instead of failing??
-            printf("bytes recieved: %d", (int)numBytesRecived);
-            DieWithSystemMessage("recvfrom() failed");           
+            continue;         
         }
-
         int returnCode = processGuess(recievedValue, theValue);
         if (returnCode == 0){
             theValue = getNewValue();
         }
   
+
         // send return code to client
         ssize_t numBytesSent = sendto(sock, &returnCode, sizeof(returnCode), 0,
             (struct sockaddr *) &clntAddr, sizeof(clntAddr)); 
@@ -198,33 +175,3 @@ void sigHandler(int signalID){
 
     exit(0);
 }
-
-
-
-    /*
-    struct addrinfo {
-        int ai_flags;               // Flags to control info resolution
-        int ai_family;              // Family: AF_INET, AF_INET6, AF_UNSPEC
-        int ai_socktype;            // Socket Type: SOCK_STREAM || SOCK_DGRAM
-        int ai_protocol;            // Protocol (0 is default) IPPROTO_XXX
-        socklen_t ai_addrlen;       // length of sock address for ai_addr
-        struct sockaddr *ai_addr;   // socket address for socket
-        char *ai_cannoname;         // Cannonical name
-        struct addrinfo *ai_next;   // next addrinfo in linked list
-    }
-
-
-    getaddrinfo(const char *hostString, const char *serviceString, 
-        const struct addrinfo *hints, struct addrinfo **results)
-
-    hostString is a char string that represents a host name
-    serviceString is a char string that represents a service name
-    hints is a addrinfo struct used to filter the results
-    results is a pointer to the first element in a linked list of 
-        addrinfo structures
-
-    Q: why pass a pointer to a pointer for last parameter?
-    A: servAddr returns a linked list, and servAddr is the first data node in 
-        the list, so a head pointer must be passsed, and this head pointer is 
-        the pointer to servAddr
-    */
