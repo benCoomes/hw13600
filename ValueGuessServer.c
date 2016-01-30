@@ -34,7 +34,7 @@ int main(int argc, char *argv[]){
         DieWithUserMessage("Parameter(s)", 
             "<Server Port/ Service> [initial value]");
     }
-    char *service = argv[1];
+    in_port_t service = atoi(argv[1]);
 
 
     // setup signal handler for SIGINT
@@ -48,6 +48,7 @@ int main(int argc, char *argv[]){
     }
 
     // generate addrinfo linked list
+/*
     struct addrinfo addrCriteria;
     memset(&addrCriteria, 0, sizeof(addrCriteria));
     addrCriteria.ai_family = AF_UNSPEC;
@@ -60,17 +61,23 @@ int main(int argc, char *argv[]){
         // handle getaddrinfo failure
         DieWithUserMessage("getaddrinfo() failed", gai_strerror(rtnVal));
     }
+**/
+    struct sockaddr_in servAddrReal;
+    struct sockaddr_in *servAddr = &servAddrReal;
+    memset(servAddr, 0, sizeof(struct sockaddr_in));
+    servAddr->sin_family = AF_INET;
+    servAddr->sin_addr.s_addr = htonl(INADDR_ANY);
+    servAddr->sin_port = htons(service);
 
     // build socket with servAddr linked list
-    int sock = socket(servAddr->ai_family, servAddr->ai_socktype, servAddr->ai_protocol);
+    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock < 0){
         DieWithSystemMessage("socket() failed");
     }
-    if(bind(sock, servAddr->ai_addr, servAddr->ai_addrlen) < 0){
+    if(bind(sock, (struct sockaddr *) servAddr, sizeof(*servAddr)) < 0){
         // handle binding failure
         DieWithSystemMessage("bind() failed");
     }
-    freeaddrinfo(servAddr);
 
     // initialize a struct to hold client info
     struct sockaddr_in clntAddr;
