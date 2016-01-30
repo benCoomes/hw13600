@@ -86,7 +86,7 @@ int main(int argc, char *argv[]){
     //generate starting value, either user- specified or random
     int theValue;
     if(argc == 5){
-        char *valueString = argv[2];
+        char *valueString = argv[4];
         theValue = (int)(strtol(valueString, NULL, 10));
     }
     else{

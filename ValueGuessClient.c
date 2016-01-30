@@ -213,7 +213,7 @@ double getTime(){
 
 // return values less than 0 indicate that sock does not work
 int testSocket(int sock, struct sockaddr_in *servAddr){
-/*
+
     if(sock < 0){
         return sock;
     }
@@ -221,12 +221,12 @@ int testSocket(int sock, struct sockaddr_in *servAddr){
         //try sendto and recvfrom, reutrn -1 if they fail, 1 if success
         int checkMessage = -100;
         int returnValue;
-        struct sockaddr_storage fromAddr;
+        struct sockaddr_in fromAddr;
         socklen_t fromAddrLen = sizeof(fromAddr);
         ssize_t bytesRecieved;
 
         ssize_t bytesSent = sendto(sock, &checkMessage, sizeof(checkMessage), 0,
-            servAddr -> ai_addr, servAddr -> ai_addrlen);
+            (struct sockaddr*) servAddr, sizeof(*servAddr));
         if (bytesSent < 0){
             return -1;
         }
@@ -239,7 +239,7 @@ int testSocket(int sock, struct sockaddr_in *servAddr){
         }
         alarm(0);
     }
-*/
+
     return 1;
 }
 
