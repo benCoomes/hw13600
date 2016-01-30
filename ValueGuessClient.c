@@ -14,9 +14,9 @@
 //#define VERBOSE
 
 int getNextValue(int lastVal, int statusCode);
-char checkValue(int val, int sock, struct addrinfo *servAddr);
+char checkValue(int val, int sock, struct sockaddr_in *servAddr);
 double getTime();
-int testSocket(int sock, struct addrinfo *servAddr);
+int testSocket(int sock, struct sockaddr_in *servAddr);
 void sigHandler(int signal);
 
 
@@ -32,8 +32,8 @@ int main(int argc, char *argv[]){
             "<Server Address> <Server Port 1> <Server Port 2>");
     }
     char *server = argv[1];
-    char *servPort1 = argv[2];
-    char *servPort2 = argv[3];
+    in_port_t servPort1 = atoi(argv[2]);
+    in_port_t servPort2 = atoi(argv[3]);
 
 
     // setup signal handler for SIGALRM and SIGINT
@@ -52,9 +52,20 @@ int main(int argc, char *argv[]){
 
 
     // generate addrinfo linked list using the first port option
+    struct sockaddr_in servAddrReal;
+    struct sockaddr_in *servAddr = &servAddrReal;
+
+    memset(servAddr, 0, sizeof(struct sockaddr_in));
+    servAddr->sin_family = AF_INET;
+    int rtnval = inet_pton(AF_INET, server, &(servAddr->sin_addr.s_addr));
+    if (rtnval == 0){
+        DieWithUserMessage("inet_pton() failed", "trying to make first port connection");
+    }
+    servAddr->sin_port = htons(servPort1);
+/*
     struct addrinfo addrCriteria;
     memset(&addrCriteria, 0, sizeof(addrCriteria));
-    addrCriteria.ai_family = AF_UNSPEC;
+    addrCriteria.ai_family = AF_INET;
     addrCriteria.ai_socktype = SOCK_DGRAM;
     addrCriteria.ai_protocol = IPPROTO_UDP;
     struct addrinfo *servAddr;
@@ -62,27 +73,19 @@ int main(int argc, char *argv[]){
     if (rtnval != 0){
         DieWithUserMessage("getaddrinfo() failed", gai_strerror(rtnval));
     }
-
+*/
     // try to build a socket with port 1 and then port 2, and test if it works
-    int sock = socket(servAddr-> ai_family, servAddr-> ai_socktype, 
-        servAddr-> ai_protocol);
-    int socketStatus = -1;
-    socketStatus = testSocket(sock, servAddr);
-    if (socketStatus < 0) {
+    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    int connectionStatus = -1;
+    connectionStatus = testSocket(sock, servAddr);
+    if (connectionStatus < 0) {
         #ifdef VERBOSE
-            puts("sock() with port 1 failed, trying to build socket with port 2...\n");
+            puts("connection with port 1 failed, trying to build socket with port 2...\n");
         #endif
 
-        freeaddrinfo(servAddr); // Is servAddr usable in getaddrinfo after this?
-        int rtnval = getaddrinfo(server, servPort2, &addrCriteria, &servAddr);
-        if (rtnval != 0){
-            DieWithUserMessage("getaddrinfo() failed", gai_strerror(rtnval));
-        }
-
-        sock = socket(servAddr-> ai_family, servAddr-> ai_socktype, 
-            servAddr-> ai_protocol);
-        socketStatus = testSocket(sock, servAddr);
-        if(socketStatus < 0){
+        servAddr->sin_port = htons(servPort2);
+        connectionStatus = testSocket(sock, servAddr);
+        if(connectionStatus < 0){
             DieWithUserMessage("Socket()", "failed to create socket, tried both ports");
         }
     }
@@ -121,7 +124,6 @@ int main(int argc, char *argv[]){
     //print completion message: 
     //number of guesses, running time, correctly guessed value
     printf("%d\t%.2f\t%d\n", guessCount, totalTime, nextValue);
-    freeaddrinfo(servAddr);
     close(sock);
     exit(0);
 }
@@ -146,13 +148,13 @@ int getNextValue(int lastVal, int statusCode){
     return nextVal;
 }
 
-char checkValue(int guess, int sock, struct addrinfo *servAddr){
+char checkValue(int guess, int sock, struct sockaddr_in *servAddr){
 
     int returnedCode;
-
+    socklen_t servAddrLen = sizeof(*servAddr);
     // send package with val to server 
     ssize_t bytesSent = sendto(sock, &guess, sizeof(guess), 0,
-        servAddr -> ai_addr, servAddr -> ai_addrlen);
+        (struct sockaddr *) servAddr, servAddrLen);
     if (bytesSent < 0){
         DieWithSystemMessage("sendto() failed");
     }
@@ -211,7 +213,7 @@ double getTime(){
 }
 
 // return values less than 0 indicate that sock does not work
-int testSocket(int sock, struct addrinfo *servAddr){
+int testSocket(int sock, struct sockaddr_in *servAddr){
 /*
     if(sock < 0){
         return sock;
