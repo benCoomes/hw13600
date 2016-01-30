@@ -19,6 +19,10 @@ double getTime();
 void interruptSignalHandler(int signal);
 struct sigaction handler;
 
+int returnedCode = 4;
+int nextValue = 0;
+int guessCount = 0;
+double runtime = 0.0;
 
 int main(int argc, char *argv[]){
 
@@ -83,13 +87,11 @@ int main(int argc, char *argv[]){
 
     // Main loop: loop until a value is guessed correctly
     // 4 is arbitrary, only 0, 1, and 2 are meaningful returnedCode values
-    int returnedCode = 4;
-    int nextValue = 0;
-    int guessCount = 0;
-    double runtime = getTime();
-    do {
+    runtime = getTime();
+    while (1) {
         // start work here, get rid of switch, implement same logic with something else
         printf("at top of main loop, ");
+        /*
         switch(jumpCode){
             case SIGALRM:
                 // case for when alarm goes off!
@@ -112,9 +114,28 @@ int main(int argc, char *argv[]){
                 //long jump called, fatal error!
                 exit(1);
         }
-       
-    } while (returnedCode != 0);
+        */
 
+        
+        returnedCode = checkValue(nextValue, sock, servAddr);
+        alarm(0);
+        switch(returnedCode){
+            case SIGALRM:
+                //when alarm is popped, continue with loop
+                returnedCode = 4;
+                break;
+            case 1:
+            case 2:
+                //for guesses that were incorrecct
+                nextValue = getNextValue(nextValue, returnedCode);
+                break;
+
+            case 0:
+                goto clean_up;
+                break;
+        }
+       
+    }
 
 
     clean_up: ;
@@ -163,15 +184,18 @@ char checkValue(int guess, int sock, struct addrinfo *servAddr){
     struct sockaddr_storage fromAddr;
     socklen_t fromAddrLen = sizeof(fromAddr);
 
-    int returnedCode;
-    ssize_t bytesRecieved = recvfrom(sock, &returnedCode, sizeof(returnedCode), 0, 
-        (struct sockaddr*) &fromAddr, &fromAddrLen);
-    if (bytesRecieved < 0){
-        DieWithSystemMessage("recvfrom() failed");
+    alarm(1);
+    if(returnedCode != SIGALRM){
+        ssize_t bytesRecieved = recvfrom(sock, &returnedCode, sizeof(returnedCode), 0, 
+            (struct sockaddr*) &fromAddr, &fromAddrLen);
+        if (bytesRecieved < 0){
+            DieWithSystemMessage("recvfrom() failed");
+        }
+        else if (bytesRecieved != sizeof(int)){
+            DieWithUserMessage("recvfrom() error", "recieved unexpected number of bytes");
+        }
     }
-    else if (bytesRecieved != sizeof(int)){
-        DieWithUserMessage("recvfrom() error", "recieved unexpected number of bytes");
-    }
+    
     // verify package recived is from server that package was sent to
 /*
     below currently commented out, function not yet written
@@ -183,9 +207,9 @@ char checkValue(int guess, int sock, struct addrinfo *servAddr){
     }
 */
     // evaluate validity of response
-    if (returnedCode != 0 && returnedCode != 1 && returnedCode != 2){
+    /*if (returnedCode != 0 && returnedCode != 1 && returnedCode != 2){
         DieWithUserMessage("recvfrom() error", "recieved meaningless value.");
-    }
+    }*/
 
     //return response
     printf("returnedCode: %d\n", returnedCode);
@@ -202,16 +226,13 @@ double getTime(){
 void interruptSignalHandler(int signalID){
     printf("in interruptSignalHandler\n");
     if(signalID == SIGINT){
-        // jump with code indicating that a user interupt occured
-        printf("taking long jump to sigint case\n");
-        longjmp(jumpState, signalID);
+        double totalTime = getTime() - runtime;
+        printf("%d\t%.2f\t%d\n", guessCount, totalTime, nextValue);
         return;
     }
     else if(signalID == SIGALRM){
-        // jump with code indicating that an alarm popped
-        printf("taking long jump to sigalrm case\n");
-        alarm(1);
-        longjmp(jumpState, signalID);
+        printf("in alarm handler, setting returnedCode to SIGALRM\n");
+        returnedCode = SIGALRM;
         return;
     }
     else{
