@@ -212,6 +212,7 @@ double getTime(){
 
 // return values less than 0 indicate that sock does not work
 int testSocket(int sock, struct addrinfo *servAddr){
+/*
     if(sock < 0){
         return sock;
     }
@@ -237,7 +238,7 @@ int testSocket(int sock, struct addrinfo *servAddr){
         }
         alarm(0);
     }
-
+*/
     return 1;
 }
 
