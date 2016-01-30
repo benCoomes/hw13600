@@ -27,13 +27,13 @@ double runtime = 0.0;
 int main(int argc, char *argv[]){
 
     // parse command line arguments
-    if (argc != 4){
+    if (argc != 7){
         DieWithUserMessage("Parameter(s)", 
-            "<Server Address> <Server Port 1> <Server Port 2>");
+            "-s <Server Address> -p1 <Server Port 1> -p2 <Server Port 2>");
     }
-    char *server = argv[1];
-    in_port_t servPort1 = atoi(argv[2]);
-    in_port_t servPort2 = atoi(argv[3]);
+    char *server = argv[2];
+    in_port_t servPort1 = atoi(argv[4]);
+    in_port_t servPort2 = atoi(argv[6]);
 
 
     // setup signal handler for SIGALRM and SIGINT
@@ -54,7 +54,6 @@ int main(int argc, char *argv[]){
     // generate addrinfo linked list using the first port option
     struct sockaddr_in servAddrReal;
     struct sockaddr_in *servAddr = &servAddrReal;
-
     memset(servAddr, 0, sizeof(struct sockaddr_in));
     servAddr->sin_family = AF_INET;
     int rtnval = inet_pton(AF_INET, server, &(servAddr->sin_addr.s_addr));

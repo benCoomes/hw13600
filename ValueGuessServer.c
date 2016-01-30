@@ -30,11 +30,11 @@ struct clientNode *clientListHead = NULL;
 
 int main(int argc, char *argv[]){
     // parse user arguments
-    if(argc < 2 || argc > 3){
+    if(argc != 3 || argc != 5){
         DieWithUserMessage("Parameter(s)", 
-            "<Server Port/ Service> [initial value]");
+            "-p <Server Port/ Service> -v [initial value]");
     }
-    in_port_t service = atoi(argv[1]);
+    in_port_t service = atoi(argv[3]);
 
 
     // setup signal handler for SIGINT
@@ -85,7 +85,7 @@ int main(int argc, char *argv[]){
 
     //generate starting value, either user- specified or random
     int theValue;
-    if(argc == 3){
+    if(argc == 5){
         char *valueString = argv[2];
         theValue = (int)(strtol(valueString, NULL, 10));
     }
