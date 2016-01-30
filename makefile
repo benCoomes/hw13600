@@ -1,13 +1,13 @@
 CC=gcc
 CFLAGS=-c -Wall -std=c99
 
-all: server client
+all: valueServer valueGuesser
 
-server: DieWithMessage.c ValueGuessServer.c AddressUtility.c
-	$(CC) ValueGuessServer.c DieWithMessage.c AddressUtility.c -oserver
+valueServer: DieWithMessage.c ValueGuessServer.c AddressUtility.c
+	$(CC) ValueGuessServer.c DieWithMessage.c AddressUtility.c -o valueServer
 
-client: DieWithMessage.c ValueGuessClient.c AddressUtility.c
-	$(CC) ValueGuessClient.c DieWithMessage.c AddressUtility.c -oclient
+valueGuesser: DieWithMessage.c ValueGuessClient.c AddressUtility.c
+	$(CC) ValueGuessClient.c DieWithMessage.c AddressUtility.c -o valueGuesser
 
 clean: 
 	rm client server
