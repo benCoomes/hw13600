@@ -203,7 +203,7 @@ int testSocket(int sock, struct sockaddr_in *servAddr){
         int returnValue;
         struct sockaddr_in fromAddr;
         socklen_t fromAddrLen = sizeof(fromAddr);
-        ssize_t bytesRecieved;
+        ssize_t bytesRecieved = 0;
 
         ssize_t bytesSent = sendto(sock, &checkMessage, sizeof(checkMessage), 0,
             (struct sockaddr*) servAddr, sizeof(*servAddr));
@@ -214,7 +214,7 @@ int testSocket(int sock, struct sockaddr_in *servAddr){
         alarm(TIMEOUTSEC);
         bytesRecieved = recvfrom(sock, &returnValue, sizeof(returnValue), 0, 
             (struct sockaddr*) &fromAddr, &fromAddrLen);
-        if (bytesRecieved < 0){
+        if (bytesRecieved <= 0){
             return -1;
         }
         alarm(0);
