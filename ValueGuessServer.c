@@ -87,35 +87,7 @@ int main(int argc, char *argv[]){
             (struct sockaddr*) &clntAddr, &clntAddrLen);
 
 
-        // check to see if client is list of known clients
-        uint32_t clientAddress = clntAddr.sin_addr.s_addr;
-        in_port_t clientPort = clntAddr.sin_port;
-        struct clientNode *nextClient = clientListHead;
-        bool clientIsInList = false;
-        while (nextClient != NULL && !clientIsInList){
-            uint32_t nextClientAddress = nextClient -> clientSockaddr -> 
-                sin_addr.s_addr;
-            in_port_t nextClientPort = nextClient -> clientSockaddr -> sin_port;
-
-            if(nextClientAddress == clientAddress && nextClientPort == clientPort){
-                //client is in list
-                clientIsInList = true;
-            }
-            nextClient = nextClient -> next;
-        }
-        if (!clientIsInList){
-        #ifdef VERBOSE
-            printf("New Client! Address and port: %u: %u\n", clientAddress, clientPort);
-        #endif
-            // add new client to list
-            struct clientNode *newClient = malloc(sizeof(struct clientNode));
-            newClient -> clientSockaddr = malloc(sizeof(struct sockaddr_in));
-            newClient -> clientSockaddr -> sin_addr.s_addr = clientAddress;
-            newClient -> clientSockaddr -> sin_port = clientPort;
-            newClient -> next = clientListHead;
-            clientListHead = newClient;
-            clientsHandled++;
-        }
+        //client stuff used to go here
 
 
         //check clients value and generate the return code
@@ -125,6 +97,35 @@ int main(int argc, char *argv[]){
         int returnCode = processGuess(recievedValue, theValue);
         if (returnCode == 0){
             theValue = getNewValue();
+            // check to see if client is list of known clients
+            uint32_t clientAddress = clntAddr.sin_addr.s_addr;
+            in_port_t clientPort = clntAddr.sin_port;
+            struct clientNode *nextClient = clientListHead;
+            bool clientIsInList = false;
+            while (nextClient != NULL && !clientIsInList){
+                uint32_t nextClientAddress = nextClient -> clientSockaddr -> 
+                    sin_addr.s_addr;
+                in_port_t nextClientPort = nextClient -> clientSockaddr -> sin_port;
+
+                if(nextClientAddress == clientAddress && nextClientPort == clientPort){
+                    //client is in list
+                    clientIsInList = true;
+                }
+                nextClient = nextClient -> next;
+            }
+            if (!clientIsInList){
+            #ifdef VERBOSE
+                printf("New Client! Address and port: %u: %u\n", clientAddress, clientPort);
+            #endif
+                // add new client to list
+                struct clientNode *newClient = malloc(sizeof(struct clientNode));
+                newClient -> clientSockaddr = malloc(sizeof(struct sockaddr_in));
+                newClient -> clientSockaddr -> sin_addr.s_addr = clientAddress;
+                newClient -> clientSockaddr -> sin_port = clientPort;
+                newClient -> next = clientListHead;
+                clientListHead = newClient;
+                clientsHandled++;
+            }
         }
   
 
