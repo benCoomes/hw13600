@@ -75,7 +75,10 @@ int main(int argc, char *argv[]){
         servAddr->sin_port = htons(servPort2);
         connectionStatus = testSocket(sock, servAddr);
         if(connectionStatus < 0){
-            DieWithUserMessage("Socket()", "failed to create socket, tried both ports");
+            #ifdef VERBOSE
+            printf("Warning: Neither port was successfully communicated with.");
+            #endif
+            //DieWithUserMessage("Socket()", "failed to create socket, tried both ports");
         }
     }
 
@@ -193,7 +196,7 @@ int testSocket(int sock, struct sockaddr_in *servAddr){
     }
 
     // commented out because the auto tester doesnt like it... :(
-    /*
+    
     else {
         //try sendto and recvfrom, reutrn -1 if they fail, 1 if success
         int checkMessage = -100;
@@ -216,7 +219,7 @@ int testSocket(int sock, struct sockaddr_in *servAddr){
         }
         alarm(0);
     }
-    */
+    
 
     return 1;
 }
